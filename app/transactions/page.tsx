@@ -1,16 +1,19 @@
+```tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
+import { supabase } from "@/lib/supabase";
 
-type Tx = {
+type Transaction = {
   id: string;
   date: string;
   amount: number;
   type: "income" | "expense";
   description: string;
   category: string | null;
+  party: string | null;
+  payment_method: string | null;
   receipt_url: string | null;
 };
 
@@ -19,33 +22,29 @@ function today() {
 }
 
 export default function TransactionsPage() {
-  const [transactions, setTransactions] = useState<Tx[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [filter, setFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+
+  const [filter, setFilter] = useState<
+    "all" | "income" | "expense"
+  >("all");
+
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   const [form, setForm] = useState({
     type: "income" as "income" | "expense",
     amount: "",
     description: "",
     category: "",
+    party: "",
+    payment_method: "",
     date: today(),
-    notes: "",
-    receipt: null as File | null,
   });
 
-  const [currency] = useState(
-    () =>
-      typeof window !== "undefined"
-        ? localStorage.getItem(
-            "moneyclarity_currency"
-          ) || "PKR"
-        : "PKR"
-  );
+  async function loadTransactions() {
+    setLoading(true);
 
-  async function load() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -58,57 +57,63 @@ export default function TransactionsPage() {
     const { data, error } = await supabase
       .from("transactions")
       .select(
-        "id,date,amount,type,description,category,receipt_url"
+        "id,date,amount,type,description,category,party,payment_method,receipt_url"
       )
       .order("date", { ascending: false })
       .order("created_at", { ascending: false });
 
     if (error) {
       setMessage(error.message);
+      setTransactions([]);
     } else {
-      setTransactions((data as Tx[]) || []);
-    }
-
-    const savedCategories =
-      localStorage.getItem(
-        "moneyclarity_categories"
-      );
-
-    if (savedCategories) {
-      setCategories(JSON.parse(savedCategories));
+      setTransactions((data as Transaction[]) || []);
     }
 
     setLoading(false);
   }
 
   useEffect(() => {
-    load();
+    loadTransactions();
   }, []);
 
-  const filtered = useMemo(() => {
-    return transactions.filter((t) => {
-      const categoryMatch =
-        filter === "all" ||
-        (t.category || "Uncategorized") === filter;
+  const categories = useMemo(() => {
+    const values = transactions
+      .map((transaction) => transaction.category)
+      .filter(
+        (category): category is string =>
+          Boolean(category && category.trim())
+      );
 
-      const typeMatch =
-        typeFilter === "all" || t.type === typeFilter;
+    return Array.from(new Set(values)).sort();
+  }, [transactions]);
 
-      return categoryMatch && typeMatch;
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((transaction) => {
+      const typeMatches =
+        filter === "all" || transaction.type === filter;
+
+      const categoryMatches =
+        categoryFilter === "all" ||
+        transaction.category === categoryFilter;
+
+      return typeMatches && categoryMatches;
     });
-  }, [transactions, filter, typeFilter]);
+  }, [transactions, filter, categoryFilter]);
 
   async function addTransaction(
-    e: React.FormEvent
+    event: React.FormEvent<HTMLFormElement>
   ) {
-    e.preventDefault();
+    event.preventDefault();
     setMessage("");
 
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!user) return;
+    if (!user) {
+      window.location.href = "/login";
+      return;
+    }
 
     const amount = Number(form.amount);
 
@@ -122,31 +127,9 @@ export default function TransactionsPage() {
       return;
     }
 
-    let receiptUrl: string | null = null;
-
-    if (form.receipt) {
-      const extension =
-        form.receipt.name.split(".").pop() || "file";
-
-      const fileName = `${user.id}/${crypto.randomUUID()}.${extension}`;
-
-      const { error: uploadError } =
-        await supabase.storage
-          .from("receipts")
-          .upload(fileName, form.receipt);
-
-      if (uploadError) {
-        setMessage(
-          "Receipt could not be uploaded. Make sure the Supabase Storage bucket 'receipts' exists."
-        );
-        return;
-      }
-
-      const { data } = supabase.storage
-        .from("receipts")
-        .getPublicUrl(fileName);
-
-      receiptUrl = data.publicUrl;
+    if (!form.date) {
+      setMessage("Select a transaction date.");
+      return;
     }
 
     const { error } = await supabase
@@ -157,9 +140,10 @@ export default function TransactionsPage() {
         type: form.type,
         description: form.description.trim(),
         category: form.category.trim() || null,
+        party: form.party.trim() || null,
+        payment_method:
+          form.payment_method.trim() || null,
         date: form.date,
-        notes: form.notes.trim() || null,
-        receipt_url: receiptUrl,
       });
 
     if (error) {
@@ -172,17 +156,19 @@ export default function TransactionsPage() {
       amount: "",
       description: "",
       category: "",
+      party: "",
+      payment_method: "",
       date: today(),
-      notes: "",
-      receipt: null,
     });
 
-    setMessage("Transaction saved.");
+    setMessage("Transaction saved successfully.");
 
-    await load();
+    await loadTransactions();
   }
 
   async function deleteTransaction(id: string) {
+    setMessage("");
+
     const confirmed = window.confirm(
       "Delete this transaction?"
     );
@@ -200,7 +186,13 @@ export default function TransactionsPage() {
     }
 
     setMessage("Transaction deleted.");
-    await load();
+
+    await loadTransactions();
+  }
+
+  async function logout() {
+    await supabase.auth.signOut();
+    window.location.href = "/";
   }
 
   return (
@@ -211,28 +203,41 @@ export default function TransactionsPage() {
         <div className="dashboardMain">
           <header className="dashHeader">
             <div>
-              <div className="eyebrow">Money Clarity</div>
-              <strong>Transactions</strong>
+              <div className="eyebrow">
+                Financial records
+              </div>
+
+              <h1 className="pageHeading">
+                Transactions
+              </h1>
             </div>
+
+            <button
+              type="button"
+              className="logoutButton"
+              onClick={logout}
+            >
+              Log out
+            </button>
           </header>
 
           <section className="dashContent">
-            <div className="dashboardPageHeading">
+            <div className="pageIntro">
               <div>
                 <div className="eyebrow">
-                  Financial records
+                  All activity
                 </div>
-                <h1>Transactions</h1>
+
+                <h2>
+                  Every payment in one place.
+                </h2>
+
                 <p>
-                  Record, review and manage every income
-                  and expense.
+                  Record, review and filter your
+                  income and expenses.
                 </p>
               </div>
             </div>
-
-            {message && (
-              <div className="notice">{message}</div>
-            )}
 
             <div className="transactionLayout">
               <section className="panel">
@@ -241,8 +246,8 @@ export default function TransactionsPage() {
                 </div>
 
                 <form
-                  className="txForm"
                   onSubmit={addTransaction}
+                  className="txForm"
                 >
                   <div className="toggle">
                     <button
@@ -281,19 +286,20 @@ export default function TransactionsPage() {
                   </div>
 
                   <label>
-                    Amount ({currency})
+                    Amount
                     <input
                       type="number"
                       min="0"
                       step="0.01"
                       value={form.amount}
-                      onChange={(e) =>
+                      onChange={(event) =>
                         setForm({
                           ...form,
-                          amount: e.target.value,
+                          amount:
+                            event.target.value,
                         })
                       }
-                      placeholder="0"
+                      placeholder="0.00"
                     />
                   </label>
 
@@ -301,10 +307,11 @@ export default function TransactionsPage() {
                     Description
                     <input
                       value={form.description}
-                      onChange={(e) =>
+                      onChange={(event) =>
                         setForm({
                           ...form,
-                          description: e.target.value,
+                          description:
+                            event.target.value,
                         })
                       }
                       placeholder="e.g. Client payment"
@@ -313,80 +320,76 @@ export default function TransactionsPage() {
 
                   <label>
                     Category
-                    <select
+                    <input
                       value={form.category}
-                      onChange={(e) =>
+                      onChange={(event) =>
                         setForm({
                           ...form,
-                          category: e.target.value,
+                          category:
+                            event.target.value,
+                        })
+                      }
+                      placeholder="e.g. Sales, Fuel, Rent"
+                    />
+                  </label>
+
+                  <label>
+                    Customer / Supplier
+                    <input
+                      value={form.party}
+                      onChange={(event) =>
+                        setForm({
+                          ...form,
+                          party:
+                            event.target.value,
+                        })
+                      }
+                      placeholder="Optional"
+                    />
+                  </label>
+
+                  <label>
+                    Payment method
+                    <select
+                      value={form.payment_method}
+                      onChange={(event) =>
+                        setForm({
+                          ...form,
+                          payment_method:
+                            event.target.value,
                         })
                       }
                     >
                       <option value="">
-                        Uncategorized
+                        Select method
                       </option>
-
-                      {categories.map((category) => (
-                        <option
-                          key={category}
-                          value={category}
-                        >
-                          {category}
-                        </option>
-                      ))}
+                      <option value="Cash">
+                        Cash
+                      </option>
+                      <option value="Bank">
+                        Bank
+                      </option>
+                      <option value="Card">
+                        Card
+                      </option>
+                      <option value="Online">
+                        Online
+                      </option>
                     </select>
                   </label>
 
                   <label>
-                    Date
+                    Transaction date
                     <input
                       type="date"
                       value={form.date}
-                      onChange={(e) =>
+                      onChange={(event) =>
                         setForm({
                           ...form,
-                          date: e.target.value,
+                          date: event.target.value,
                         })
                       }
                     />
-                  </label>
-
-                  <label>
-                    Notes
-                    <textarea
-                      value={form.notes}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          notes: e.target.value,
-                        })
-                      }
-                      placeholder="Optional notes"
-                    />
-                  </label>
-
-                  <label>
-                    Receipt
-                    <span className="optional">
-                      optional
-                    </span>
-
-                    <input
-                      type="file"
-                      accept="image/*,.pdf"
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          receipt:
-                            e.target.files?.[0] || null,
-                        })
-                      }
-                    />
-
-                    <small className="muted">
-                      Add a photo or PDF receipt if you
-                      want to document this transaction.
-                    </small>
                   </label>
 
                   <button
@@ -396,40 +399,71 @@ export default function TransactionsPage() {
                     Save transaction
                   </button>
                 </form>
+
+                {message && (
+                  <div className="notice">
+                    {message}
+                  </div>
+                )}
               </section>
 
               <section className="panel">
                 <div className="panelHead">
                   <div>
-                    <h2>All transactions</h2>
+                    <h2>Transactions</h2>
                     <span>
-                      {filtered.length} records
+                      {filteredTransactions.length} shown
                     </span>
                   </div>
                 </div>
 
-                <div className="filterBar">
-                  <select
-                    value={typeFilter}
-                    onChange={(e) =>
-                      setTypeFilter(e.target.value)
+                <div className="transactionFilters">
+                  <button
+                    type="button"
+                    className={
+                      filter === "all"
+                        ? "filterButton active"
+                        : "filterButton"
+                    }
+                    onClick={() => setFilter("all")}
+                  >
+                    All
+                  </button>
+
+                  <button
+                    type="button"
+                    className={
+                      filter === "income"
+                        ? "filterButton active"
+                        : "filterButton"
+                    }
+                    onClick={() =>
+                      setFilter("income")
                     }
                   >
-                    <option value="all">
-                      All types
-                    </option>
-                    <option value="income">
-                      Income
-                    </option>
-                    <option value="expense">
-                      Expenses
-                    </option>
-                  </select>
+                    Income
+                  </button>
+
+                  <button
+                    type="button"
+                    className={
+                      filter === "expense"
+                        ? "filterButton active"
+                        : "filterButton"
+                    }
+                    onClick={() =>
+                      setFilter("expense")
+                    }
+                  >
+                    Expenses
+                  </button>
 
                   <select
-                    value={filter}
-                    onChange={(e) =>
-                      setFilter(e.target.value)
+                    value={categoryFilter}
+                    onChange={(event) =>
+                      setCategoryFilter(
+                        event.target.value
+                      )
                     }
                   >
                     <option value="all">
@@ -444,69 +478,61 @@ export default function TransactionsPage() {
                         {category}
                       </option>
                     ))}
-
-                    <option value="Uncategorized">
-                      Uncategorized
-                    </option>
                   </select>
                 </div>
 
                 {loading ? (
-                  <p className="muted">Loading…</p>
-                ) : filtered.length === 0 ? (
+                  <p className="muted">
+                    Loading transactions…
+                  </p>
+                ) : filteredTransactions.length ===
+                  0 ? (
                   <div className="empty">
-                    No transactions match your filters.
+                    No transactions match
+                    your filters.
                   </div>
                 ) : (
                   <div className="txList">
-                    {filtered.map((t) => {
-                      const needsReview =
-                        t.type === "expense" &&
-                        Number(t.amount) > 500 &&
-                        !t.receipt_url;
-
-                      return (
+                    {filteredTransactions.map(
+                      (transaction) => (
                         <div
-                          className="txRow transactionRow"
-                          key={t.id}
+                          className="txRow"
+                          key={transaction.id}
                         >
                           <div>
-                            <b>{t.description}</b>
+                            <b>
+                              {transaction.description}
+                            </b>
 
                             <small>
-                              {t.date}
-                              {" · "}
-                              {t.category ||
-                                "Uncategorized"}
+                              {transaction.date}
+
+                              {transaction.category
+                                ? ` · ${transaction.category}`
+                                : ""}
+
+                              {transaction.party
+                                ? ` · ${transaction.party}`
+                                : ""}
                             </small>
-
-                            {needsReview && (
-                              <span className="reviewBadge">
-                                Review needed
-                              </span>
-                            )}
-
-                            {t.receipt_url && (
-                              <span className="receiptBadge">
-                                Receipt attached
-                              </span>
-                            )}
                           </div>
 
                           <div className="txActions">
                             <strong
                               className={
-                                t.type === "expense"
+                                transaction.type ===
+                                "expense"
                                   ? "expense"
                                   : ""
                               }
                             >
-                              {t.type === "expense"
+                              {transaction.type ===
+                              "expense"
                                 ? "−"
                                 : "+"}{" "}
-                              {currency}{" "}
+                              PKR{" "}
                               {Number(
-                                t.amount
+                                transaction.amount
                               ).toLocaleString()}
                             </strong>
 
@@ -514,15 +540,17 @@ export default function TransactionsPage() {
                               type="button"
                               className="deleteButton"
                               onClick={() =>
-                                deleteTransaction(t.id)
+                                deleteTransaction(
+                                  transaction.id
+                                )
                               }
                             >
                               Delete
                             </button>
                           </div>
                         </div>
-                      );
-                    })}
+                      )
+                    )}
                   </div>
                 )}
               </section>
@@ -533,3 +561,4 @@ export default function TransactionsPage() {
     </main>
   );
 }
+```
