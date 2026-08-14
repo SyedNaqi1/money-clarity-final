@@ -1,15 +1,16 @@
+```tsx
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const links = [
+const navigation = [
   { href: "/dashboard", label: "Dashboard", icon: "▦" },
   { href: "/transactions", label: "Transactions", icon: "↕" },
-  { href: "/insights", label: "Insights", icon: "◔" },
   { href: "/customers", label: "Customers", icon: "♙" },
   { href: "/suppliers", label: "Suppliers", icon: "⌂" },
-  { href: "/categories", label: "Categories", icon: "◫" },
+  { href: "/categories", label: "Categories", icon: "◈" },
+  { href: "/insights", label: "Insights", icon: "◔" },
 ];
 
 export default function Sidebar() {
@@ -25,20 +26,20 @@ export default function Sidebar() {
       </div>
 
       <nav className="sidebarNav">
-        {links.map((link) => {
+        {navigation.map((item) => {
           const active =
-            pathname === link.href ||
-            (link.href !== "/dashboard" &&
-              pathname.startsWith(link.href));
+            pathname === item.href ||
+            (item.href !== "/dashboard" &&
+              pathname.startsWith(item.href));
 
           return (
             <Link
-              key={link.href}
-              href={link.href}
+              key={item.href}
+              href={item.href}
               className={`sidebarLink ${active ? "active" : ""}`}
             >
-              <span className="sidebarIcon">{link.icon}</span>
-              <span>{link.label}</span>
+              <span className="sidebarIcon">{item.icon}</span>
+              <span>{item.label}</span>
             </Link>
           );
         })}
@@ -63,3 +64,4 @@ export default function Sidebar() {
     </aside>
   );
 }
+```
