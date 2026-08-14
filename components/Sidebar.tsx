@@ -3,17 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+const links = [
+  { href: "/dashboard", label: "Dashboard", icon: "▦" },
+  { href: "/transactions", label: "Transactions", icon: "↕" },
+  { href: "/insights", label: "Insights", icon: "◔" },
+  { href: "/customers", label: "Customers", icon: "♙" },
+  { href: "/suppliers", label: "Suppliers", icon: "⌂" },
+  { href: "/categories", label: "Categories", icon: "◫" },
+];
+
 export default function Sidebar() {
   const pathname = usePathname();
-
-  const links = [
-    { href: "/dashboard", icon: "▦", label: "Dashboard" },
-    { href: "/transactions", icon: "↕", label: "Transactions" },
-    { href: "/customers", icon: "♙", label: "Customers" },
-    { href: "/suppliers", icon: "⌂", label: "Suppliers" },
-    { href: "/categories", icon: "◇", label: "Categories" },
-    { href: "/insights", icon: "◔", label: "Insights" },
-  ];
 
   return (
     <aside className="sidebar">
@@ -28,7 +28,8 @@ export default function Sidebar() {
         {links.map((link) => {
           const active =
             pathname === link.href ||
-            (link.href === "/dashboard" && pathname === "/");
+            (link.href !== "/dashboard" &&
+              pathname.startsWith(link.href));
 
           return (
             <Link
