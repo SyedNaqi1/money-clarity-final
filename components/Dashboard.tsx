@@ -21,6 +21,7 @@ export default function Dashboard() {
   const [transactions, setTransactions] = useState<Tx[]>([]);
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
 
   const [form, setForm] = useState({
     type: "income" as "income" | "expense",
@@ -30,9 +31,7 @@ export default function Dashboard() {
     date: today(),
   });
 
-  const [message, setMessage] = useState("");
-
-  async function load() {
+  async function loadTransactions() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -61,17 +60,23 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    load();
+    loadTransactions();
   }, []);
 
   const stats = useMemo(() => {
     const revenue = transactions
-      .filter((x) => x.type === "income")
-      .reduce((sum, x) => sum + Number(x.amount), 0);
+      .filter((transaction) => transaction.type === "income")
+      .reduce(
+        (total, transaction) => total + Number(transaction.amount),
+        0
+      );
 
     const expenses = transactions
-      .filter((x) => x.type === "expense")
-      .reduce((sum, x) => sum + Number(x.amount), 0);
+      .filter((transaction) => transaction.type === "expense")
+      .reduce(
+        (total, transaction) => total + Number(transaction.amount),
+        0
+      );
 
     return {
       revenue,
@@ -80,8 +85,10 @@ export default function Dashboard() {
     };
   }, [transactions]);
 
-  async function addTransaction(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function addTransaction(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
     setMessage("");
 
     const {
@@ -134,7 +141,7 @@ export default function Dashboard() {
 
     setMessage("Transaction saved successfully.");
 
-    await load();
+    await loadTransactions();
   }
 
   async function deleteTransaction(id: string) {
@@ -160,7 +167,7 @@ export default function Dashboard() {
 
     setMessage("Transaction deleted.");
 
-    await load();
+    await loadTransactions();
   }
 
   async function logout() {
@@ -171,63 +178,89 @@ export default function Dashboard() {
   return (
     <main className="dashboardPage">
       <div className="dashboardShell">
+
         <Sidebar />
 
         <div className="dashboardMain">
+
           <header className="dashHeader">
             <div>
-              <div className="eyebrow">Financial overview</div>
+              <div className="eyebrow">
+                Financial overview
+              </div>
             </div>
 
             <div className="userArea">
               <span>{email}</span>
 
-              <button type="button" onClick={logout}>
+              <button
+                type="button"
+                onClick={logout}
+              >
                 Log out
               </button>
             </div>
           </header>
 
           <section className="dashContent">
+
             <div className="dashIntro">
               <div>
-                <div className="eyebrow">Your finances</div>
+                <div className="eyebrow">
+                  Your finances
+                </div>
 
-                <h1>Your money, clearly.</h1>
+                <h1>
+                  Your money, clearly.
+                </h1>
 
                 <p>
-                  Track income and expenses and see your net position at a
-                  glance.
+                  Track income and expenses and see
+                  your net position at a glance.
                 </p>
               </div>
             </div>
 
             <div className="statGrid big">
+
               <div className="stat">
-                <span>Total revenue</span>
+                <span>
+                  Total revenue
+                </span>
 
                 <strong>
-                  PKR {stats.revenue.toLocaleString()}
+                  PKR{" "}
+                  {stats.revenue.toLocaleString()}
                 </strong>
 
-                <small>All recorded income</small>
+                <small>
+                  All recorded income
+                </small>
               </div>
 
               <div className="stat">
-                <span>Total expenses</span>
+                <span>
+                  Total expenses
+                </span>
 
                 <strong>
-                  PKR {stats.expenses.toLocaleString()}
+                  PKR{" "}
+                  {stats.expenses.toLocaleString()}
                 </strong>
 
-                <small>All recorded expenses</small>
+                <small>
+                  All recorded expenses
+                </small>
               </div>
 
               <div className="stat">
-                <span>Net</span>
+                <span>
+                  Net
+                </span>
 
                 <strong>
-                  PKR {stats.net.toLocaleString()}
+                  PKR{" "}
+                  {stats.net.toLocaleString()}
                 </strong>
 
                 <small>
@@ -236,19 +269,26 @@ export default function Dashboard() {
                     : "Needs attention"}
                 </small>
               </div>
+
             </div>
 
             <div className="twoCol">
+
               <section className="panel">
+
                 <div className="panelHead">
-                  <h2>Add transaction</h2>
+                  <h2>
+                    Add transaction
+                  </h2>
                 </div>
 
                 <form
                   onSubmit={addTransaction}
                   className="txForm"
                 >
+
                   <div className="toggle">
+
                     <button
                       type="button"
                       className={
@@ -282,6 +322,7 @@ export default function Dashboard() {
                     >
                       Expense
                     </button>
+
                   </div>
 
                   <label>
@@ -292,10 +333,11 @@ export default function Dashboard() {
                       min="0"
                       step="0.01"
                       value={form.amount}
-                      onChange={(e) =>
+                      onChange={(event) =>
                         setForm({
                           ...form,
-                          amount: e.target.value,
+                          amount:
+                            event.target.value,
                         })
                       }
                       placeholder="0"
@@ -307,10 +349,11 @@ export default function Dashboard() {
 
                     <input
                       value={form.description}
-                      onChange={(e) =>
+                      onChange={(event) =>
                         setForm({
                           ...form,
-                          description: e.target.value,
+                          description:
+                            event.target.value,
                         })
                       }
                       placeholder="e.g. Client payment"
@@ -325,10 +368,11 @@ export default function Dashboard() {
 
                     <input
                       value={form.category}
-                      onChange={(e) =>
+                      onChange={(event) =>
                         setForm({
                           ...form,
-                          category: e.target.value,
+                          category:
+                            event.target.value,
                         })
                       }
                       placeholder="e.g. Sales, Rent"
@@ -341,10 +385,11 @@ export default function Dashboard() {
                     <input
                       type="date"
                       value={form.date}
-                      onChange={(e) =>
+                      onChange={(event) =>
                         setForm({
                           ...form,
-                          date: e.target.value,
+                          date:
+                            event.target.value,
                         })
                       }
                     />
@@ -356,6 +401,7 @@ export default function Dashboard() {
                   >
                     Save transaction
                   </button>
+
                 </form>
 
                 {message && (
@@ -363,86 +409,115 @@ export default function Dashboard() {
                     {message}
                   </div>
                 )}
+
               </section>
 
               <section className="panel">
+
                 <div className="panelHead">
-                  <h2>Recent transactions</h2>
+
+                  <h2>
+                    Recent transactions
+                  </h2>
 
                   <span>
                     {transactions.length} total
                   </span>
+
                 </div>
 
                 {loading ? (
+
                   <p className="muted">
                     Loading…
                   </p>
+
                 ) : transactions.length === 0 ? (
+
                   <div className="empty">
-                    No transactions yet. Add your first
-                    one.
+                    No transactions yet.
+                    Add your first one.
                   </div>
+
                 ) : (
+
                   <div className="txList">
+
                     {transactions
                       .slice(0, 10)
-                      .map((t) => (
+                      .map((transaction) => (
+
                         <div
                           className="txRow"
-                          key={t.id}
+                          key={transaction.id}
                         >
+
                           <div>
+
                             <b>
-                              {t.description}
+                              {transaction.description}
                             </b>
 
                             <small>
-                              {t.date}
+                              {transaction.date}
 
-                              {t.category
-                                ? ` · ${t.category}`
+                              {transaction.category
+                                ? ` · ${transaction.category}`
                                 : ""}
                             </small>
+
                           </div>
 
                           <div>
+
                             <strong
                               className={
-                                t.type === "expense"
+                                transaction.type ===
+                                "expense"
                                   ? "expense"
                                   : ""
                               }
                             >
-                              {t.type === "expense"
+                              {transaction.type ===
+                              "expense"
                                 ? "−"
                                 : "+"}{" "}
                               PKR{" "}
                               {Number(
-                                t.amount
+                                transaction.amount
                               ).toLocaleString()}
                             </strong>
 
                             <button
                               type="button"
+                              className="deleteButton"
                               onClick={() =>
                                 deleteTransaction(
-                                  t.id
+                                  transaction.id
                                 )
                               }
-                              className="deleteButton"
                             >
                               Delete
                             </button>
+
                           </div>
+
                         </div>
+
                       ))}
+
                   </div>
+
                 )}
+
               </section>
+
             </div>
+
           </section>
+
         </div>
+
       </div>
     </main>
   );
