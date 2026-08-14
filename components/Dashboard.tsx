@@ -67,14 +67,16 @@ export default function Dashboard() {
     const revenue = transactions
       .filter((transaction) => transaction.type === "income")
       .reduce(
-        (total, transaction) => total + Number(transaction.amount),
+        (total, transaction) =>
+          total + Number(transaction.amount),
         0
       );
 
     const expenses = transactions
       .filter((transaction) => transaction.type === "expense")
       .reduce(
-        (total, transaction) => total + Number(transaction.amount),
+        (total, transaction) =>
+          total + Number(transaction.amount),
         0
       );
 
@@ -83,6 +85,25 @@ export default function Dashboard() {
       expenses,
       net: revenue - expenses,
     };
+  }, [transactions]);
+
+  const expenseCategories = useMemo(() => {
+    const categories: Record<string, number> = {};
+
+    transactions
+      .filter((transaction) => transaction.type === "expense")
+      .forEach((transaction) => {
+        const category =
+          transaction.category?.trim() || "Uncategorized";
+
+        categories[category] =
+          (categories[category] || 0) +
+          Number(transaction.amount);
+      });
+
+    return Object.entries(categories)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
   }, [transactions]);
 
   async function addTransaction(
@@ -117,14 +138,16 @@ export default function Dashboard() {
       return;
     }
 
-    const { error } = await supabase.from("transactions").insert({
-      user_id: user.id,
-      amount,
-      type: form.type,
-      description: form.description.trim(),
-      category: form.category.trim() || null,
-      date: form.date,
-    });
+    const { error } = await supabase
+      .from("transactions")
+      .insert({
+        user_id: user.id,
+        amount,
+        type: form.type,
+        description: form.description.trim(),
+        category: form.category.trim() || null,
+        date: form.date,
+      });
 
     if (error) {
       setMessage(error.message);
@@ -177,6 +200,7 @@ export default function Dashboard() {
 
   return (
     <main className="dashboardPage">
+
       <div className="dashboardShell">
 
         <Sidebar />
@@ -224,13 +248,10 @@ export default function Dashboard() {
             <div className="statGrid big">
 
               <div className="stat">
-                <span>
-                  Total revenue
-                </span>
+                <span>Total revenue</span>
 
                 <strong>
-                  PKR{" "}
-                  {stats.revenue.toLocaleString()}
+                  PKR {stats.revenue.toLocaleString()}
                 </strong>
 
                 <small>
@@ -239,13 +260,10 @@ export default function Dashboard() {
               </div>
 
               <div className="stat">
-                <span>
-                  Total expenses
-                </span>
+                <span>Total expenses</span>
 
                 <strong>
-                  PKR{" "}
-                  {stats.expenses.toLocaleString()}
+                  PKR {stats.expenses.toLocaleString()}
                 </strong>
 
                 <small>
@@ -254,13 +272,10 @@ export default function Dashboard() {
               </div>
 
               <div className="stat">
-                <span>
-                  Net
-                </span>
+                <span>Net</span>
 
                 <strong>
-                  PKR{" "}
-                  {stats.net.toLocaleString()}
+                  PKR {stats.net.toLocaleString()}
                 </strong>
 
                 <small>
@@ -277,9 +292,7 @@ export default function Dashboard() {
               <section className="panel">
 
                 <div className="panelHead">
-                  <h2>
-                    Add transaction
-                  </h2>
+                  <h2>Add transaction</h2>
                 </div>
 
                 <form
@@ -336,8 +349,7 @@ export default function Dashboard() {
                       onChange={(event) =>
                         setForm({
                           ...form,
-                          amount:
-                            event.target.value,
+                          amount: event.target.value,
                         })
                       }
                       placeholder="0"
@@ -388,8 +400,7 @@ export default function Dashboard() {
                       onChange={(event) =>
                         setForm({
                           ...form,
-                          date:
-                            event.target.value,
+                          date: event.target.value,
                         })
                       }
                     />
@@ -412,18 +423,17 @@ export default function Dashboard() {
 
               </section>
 
-              <section className="panel">
+              <section
+                className="panel"
+                id="transactions"
+              >
 
                 <div className="panelHead">
-
-                  <h2>
-                    Recent transactions
-                  </h2>
+                  <h2>Recent transactions</h2>
 
                   <span>
                     {transactions.length} total
                   </span>
-
                 </div>
 
                 {loading ? (
@@ -453,7 +463,6 @@ export default function Dashboard() {
                         >
 
                           <div>
-
                             <b>
                               {transaction.description}
                             </b>
@@ -465,10 +474,9 @@ export default function Dashboard() {
                                 ? ` · ${transaction.category}`
                                 : ""}
                             </small>
-
                           </div>
 
-                          <div>
+                          <div className="txActions">
 
                             <strong
                               className={
@@ -514,11 +522,128 @@ export default function Dashboard() {
 
             </div>
 
+            <section
+              className="summarySection"
+              id="insights"
+            >
+
+              <div className="sectionTitle">
+                <div>
+                  <div className="eyebrow">
+                    Financial insights
+                  </div>
+
+                  <h2>
+                    Where your money is going
+                  </h2>
+                </div>
+              </div>
+
+              {expenseCategories.length === 0 ? (
+
+                <div className="summaryCard">
+                  <p className="muted">
+                    Add some expenses to see
+                    spending insights here.
+                  </p>
+                </div>
+
+              ) : (
+
+                <div className="categoryGrid">
+
+                  {expenseCategories.map(
+                    ([category, amount]) => (
+                      <div
+                        className="summaryCard"
+                        key={category}
+                      >
+                        <span>
+                          {category}
+                        </span>
+
+                        <strong>
+                          PKR{" "}
+                          {amount.toLocaleString()}
+                        </strong>
+                      </div>
+                    )
+                  )}
+
+                </div>
+
+              )}
+
+            </section>
+
+            <section
+              className="summarySection"
+              id="customers"
+            >
+
+              <div className="sectionTitle">
+                <div>
+                  <div className="eyebrow">
+                    Customers
+                  </div>
+
+                  <h2>
+                    Customer overview
+                  </h2>
+                </div>
+              </div>
+
+              <div className="summaryCard">
+                <strong>
+                  Customer management
+                </strong>
+
+                <p className="muted">
+                  Customer tracking can be
+                  connected to your income
+                  transactions here.
+                </p>
+              </div>
+
+            </section>
+
+            <section
+              className="summarySection"
+              id="suppliers"
+            >
+
+              <div className="sectionTitle">
+                <div>
+                  <div className="eyebrow">
+                    Suppliers
+                  </div>
+
+                  <h2>
+                    Supplier overview
+                  </h2>
+                </div>
+              </div>
+
+              <div className="summaryCard">
+                <strong>
+                  Supplier management
+                </strong>
+
+                <p className="muted">
+                  Supplier and purchase
+                  tracking can be managed
+                  from this section.
+                </p>
+              </div>
+
+            </section>
+
           </section>
 
         </div>
 
       </div>
+
     </main>
   );
 }
