@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
 
@@ -11,27 +12,25 @@ type Tx = {
   type: "income" | "expense";
   description: string;
   category: string | null;
+  receipt_url?: string | null;
 };
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
+function money(amount: number, currency = "PKR") {
+  return `${currency} ${amount.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 export default function Dashboard() {
   const [transactions, setTransactions] = useState<Tx[]>([]);
-  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState("");
+  const [currency, setCurrency] = useState("PKR");
+  const [companyName, setCompanyName] = useState("Your business");
   const [message, setMessage] = useState("");
 
-  const [form, setForm] = useState({
-    type: "income" as "income" | "expense",
-    amount: "",
-    description: "",
-    category: "",
-    date: today(),
-  });
-
-  async function loadTransactions() {
+  async function load() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -43,9 +42,21 @@ export default function Dashboard() {
 
     setEmail(user.email || "");
 
+    const savedCurrency =
+      localStorage.getItem("moneyclarity_currency") || "PKR";
+
+    const savedCompany =
+      localStorage.getItem("moneyclarity_company") ||
+      "Your business";
+
+    setCurrency(savedCurrency);
+    setCompanyName(savedCompany);
+
     const { data, error } = await supabase
       .from("transactions")
-      .select("id,date,amount,type,description,category")
+      .select(
+        "id,date,amount,type,description,category,receipt_url"
+      )
       .order("date", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -60,25 +71,17 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    loadTransactions();
+    load();
   }, []);
 
   const stats = useMemo(() => {
     const revenue = transactions
-      .filter((transaction) => transaction.type === "income")
-      .reduce(
-        (total, transaction) =>
-          total + Number(transaction.amount),
-        0
-      );
+      .filter((t) => t.type === "income")
+      .reduce((sum, t) => sum + Number(t.amount), 0);
 
     const expenses = transactions
-      .filter((transaction) => transaction.type === "expense")
-      .reduce(
-        (total, transaction) =>
-          total + Number(transaction.amount),
-        0
-      );
+      .filter((t) => t.type === "expense")
+      .reduce((sum, t) => sum + Number(t.amount), 0);
 
     return {
       revenue,
@@ -87,563 +90,356 @@ export default function Dashboard() {
     };
   }, [transactions]);
 
-  const expenseCategories = useMemo(() => {
-    const categories: Record<string, number> = {};
-
-    transactions
-      .filter((transaction) => transaction.type === "expense")
-      .forEach((transaction) => {
-        const category =
-          transaction.category?.trim() || "Uncategorized";
-
-        categories[category] =
-          (categories[category] || 0) +
-          Number(transaction.amount);
-      });
-
-    return Object.entries(categories)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
+  const reviewTransactions = useMemo(() => {
+    return transactions.filter(
+      (t) =>
+        t.type === "expense" &&
+        Number(t.amount) > 500 &&
+        !t.receipt_url
+    );
   }, [transactions]);
 
-  async function addTransaction(
-    event: React.FormEvent<HTMLFormElement>
-  ) {
-    event.preventDefault();
-    setMessage("");
+  const categories = useMemo(() => {
+    const map: Record<string, number> = {};
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    transactions
+      .filter((t) => t.type === "expense")
+      .forEach((t) => {
+        const name = t.category?.trim() || "Uncategorized";
 
-    if (!user) {
-      window.location.href = "/login";
-      return;
-    }
-
-    const amount = Number(form.amount);
-
-    if (!amount || amount <= 0) {
-      setMessage("Enter a valid amount.");
-      return;
-    }
-
-    if (!form.description.trim()) {
-      setMessage("Enter a description.");
-      return;
-    }
-
-    if (!form.date) {
-      setMessage("Select a transaction date.");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("transactions")
-      .insert({
-        user_id: user.id,
-        amount,
-        type: form.type,
-        description: form.description.trim(),
-        category: form.category.trim() || null,
-        date: form.date,
+        map[name] = (map[name] || 0) + Number(t.amount);
       });
 
-    if (error) {
-      setMessage(error.message);
-      return;
-    }
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6);
+  }, [transactions]);
 
-    setForm({
-      type: "income",
-      amount: "",
-      description: "",
-      category: "",
-      date: today(),
-    });
+  const maxCategory = Math.max(
+    ...categories.map(([, value]) => value),
+    1
+  );
 
-    setMessage("Transaction saved successfully.");
-
-    await loadTransactions();
-  }
-
-  async function deleteTransaction(id: string) {
-    setMessage("");
-
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this transaction?"
+  if (loading) {
+    return (
+      <main className="dashboardPage">
+        <div className="dashboardShell">
+          <Sidebar />
+          <div className="dashboardMain">
+            <div className="loadingPage">Loading your dashboard…</div>
+          </div>
+        </div>
+      </main>
     );
-
-    if (!confirmed) {
-      return;
-    }
-
-    const { error } = await supabase
-      .from("transactions")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      setMessage(error.message);
-      return;
-    }
-
-    setMessage("Transaction deleted.");
-
-    await loadTransactions();
-  }
-
-  async function logout() {
-    await supabase.auth.signOut();
-    window.location.href = "/";
   }
 
   return (
     <main className="dashboardPage">
-
       <div className="dashboardShell">
-
         <Sidebar />
 
         <div className="dashboardMain">
-
           <header className="dashHeader">
             <div>
-              <div className="eyebrow">
-                Financial overview
-              </div>
+              <div className="eyebrow">Financial overview</div>
+              <strong>{companyName}</strong>
             </div>
 
             <div className="userArea">
               <span>{email}</span>
-
-              <button
-                type="button"
-                onClick={logout}
-              >
-                Log out
-              </button>
             </div>
           </header>
 
           <section className="dashContent">
-
-            <div className="dashIntro">
+            <div className="dashboardPageHeading">
               <div>
-                <div className="eyebrow">
-                  Your finances
-                </div>
-
-                <h1>
-                  Your money, clearly.
-                </h1>
-
+                <div className="eyebrow">Dashboard</div>
+                <h1>Your money, clearly.</h1>
                 <p>
-                  Track income and expenses and see
-                  your net position at a glance.
+                  A complete overview of your income, expenses and
+                  financial position.
                 </p>
               </div>
+
+              <Link href="/transactions" className="button">
+                + Add transaction
+              </Link>
             </div>
 
+            {message && (
+              <div className="notice">{message}</div>
+            )}
+
             <div className="statGrid big">
-
               <div className="stat">
-                <span>Total revenue</span>
-
-                <strong>
-                  PKR {stats.revenue.toLocaleString()}
-                </strong>
-
-                <small>
-                  All recorded income
-                </small>
+                <span>Revenue</span>
+                <strong>{money(stats.revenue, currency)}</strong>
+                <small>Total recorded income</small>
               </div>
 
               <div className="stat">
-                <span>Total expenses</span>
-
+                <span>Expenses</span>
                 <strong>
-                  PKR {stats.expenses.toLocaleString()}
+                  {money(stats.expenses, currency)}
                 </strong>
-
-                <small>
-                  All recorded expenses
-                </small>
+                <small>Total recorded expenses</small>
               </div>
 
               <div className="stat">
-                <span>Net</span>
-
-                <strong>
-                  PKR {stats.net.toLocaleString()}
+                <span>Net profit</span>
+                <strong
+                  className={
+                    stats.net < 0 ? "expense" : ""
+                  }
+                >
+                  {money(stats.net, currency)}
                 </strong>
-
                 <small>
                   {stats.net >= 0
-                    ? "Positive balance"
+                    ? "Positive position"
                     : "Needs attention"}
                 </small>
               </div>
-
             </div>
 
-            <div className="twoCol">
-
+            <div className="dashboardGrid">
               <section className="panel">
-
                 <div className="panelHead">
-                  <h2>Add transaction</h2>
+                  <div>
+                    <h2>Revenue vs expenses</h2>
+                    <span>All recorded transactions</span>
+                  </div>
                 </div>
 
-                <form
-                  onSubmit={addTransaction}
-                  className="txForm"
-                >
+                <div className="comparisonChart">
+                  <div className="comparisonItem">
+                    <div className="comparisonLabel">
+                      <span>Revenue</span>
+                      <strong>
+                        {money(stats.revenue, currency)}
+                      </strong>
+                    </div>
 
-                  <div className="toggle">
-
-                    <button
-                      type="button"
-                      className={
-                        form.type === "income"
-                          ? "active"
-                          : ""
-                      }
-                      onClick={() =>
-                        setForm({
-                          ...form,
-                          type: "income",
-                        })
-                      }
-                    >
-                      Income
-                    </button>
-
-                    <button
-                      type="button"
-                      className={
-                        form.type === "expense"
-                          ? "active"
-                          : ""
-                      }
-                      onClick={() =>
-                        setForm({
-                          ...form,
-                          type: "expense",
-                        })
-                      }
-                    >
-                      Expense
-                    </button>
-
+                    <div className="barTrack">
+                      <div
+                        className="bar incomeBar"
+                        style={{
+                          width: `${
+                            Math.max(
+                              stats.revenue,
+                              stats.expenses,
+                              1
+                            ) === 0
+                              ? 0
+                              : (stats.revenue /
+                                  Math.max(
+                                    stats.revenue,
+                                    stats.expenses,
+                                    1
+                                  )) *
+                                100
+                          }%`,
+                        }}
+                      />
+                    </div>
                   </div>
 
-                  <label>
-                    Amount (PKR)
+                  <div className="comparisonItem">
+                    <div className="comparisonLabel">
+                      <span>Expenses</span>
+                      <strong>
+                        {money(stats.expenses, currency)}
+                      </strong>
+                    </div>
 
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={form.amount}
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-                          amount: event.target.value,
-                        })
-                      }
-                      placeholder="0"
-                    />
-                  </label>
-
-                  <label>
-                    Description
-
-                    <input
-                      value={form.description}
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-                          description:
-                            event.target.value,
-                        })
-                      }
-                      placeholder="e.g. Client payment"
-                    />
-                  </label>
-
-                  <label>
-                    Category{" "}
-                    <span className="optional">
-                      optional
-                    </span>
-
-                    <input
-                      value={form.category}
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-                          category:
-                            event.target.value,
-                        })
-                      }
-                      placeholder="e.g. Sales, Rent"
-                    />
-                  </label>
-
-                  <label>
-                    Transaction date
-
-                    <input
-                      type="date"
-                      value={form.date}
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-                          date: event.target.value,
-                        })
-                      }
-                    />
-                  </label>
-
-                  <button
-                    type="submit"
-                    className="button full"
-                  >
-                    Save transaction
-                  </button>
-
-                </form>
-
-                {message && (
-                  <div className="notice">
-                    {message}
+                    <div className="barTrack">
+                      <div
+                        className="bar expenseBar"
+                        style={{
+                          width: `${
+                            (stats.expenses /
+                              Math.max(
+                                stats.revenue,
+                                stats.expenses,
+                                1
+                              )) *
+                            100
+                          }%`,
+                        }}
+                      />
+                    </div>
                   </div>
-                )}
-
+                </div>
               </section>
 
-              <section
-                className="panel"
-                id="transactions"
-              >
-
+              <section className="panel">
                 <div className="panelHead">
-                  <h2>Recent transactions</h2>
+                  <div>
+                    <h2>Where the money went</h2>
+                    <span>Top expense categories</span>
+                  </div>
 
+                  <Link href="/insights">
+                    View insights
+                  </Link>
+                </div>
+
+                {categories.length === 0 ? (
+                  <div className="empty">
+                    No expenses recorded yet.
+                  </div>
+                ) : (
+                  <div className="categoryBars">
+                    {categories.map(([category, amount]) => (
+                      <div
+                        className="categoryBarItem"
+                        key={category}
+                      >
+                        <div className="categoryBarTop">
+                          <span>{category}</span>
+                          <strong>
+                            {money(amount, currency)}
+                          </strong>
+                        </div>
+
+                        <div className="barTrack">
+                          <div
+                            className="bar categoryBar"
+                            style={{
+                              width: `${
+                                (amount / maxCategory) * 100
+                              }%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            <section className="panel reviewPanel">
+              <div className="panelHead">
+                <div>
+                  <h2>Action needed</h2>
+                  <span>
+                    Expenses above {currency} 500 without a receipt
+                  </span>
+                </div>
+
+                {reviewTransactions.length > 0 && (
+                  <span className="reviewCount">
+                    {reviewTransactions.length} review
+                    {reviewTransactions.length === 1
+                      ? ""
+                      : "s"}
+                  </span>
+                )}
+              </div>
+
+              {reviewTransactions.length === 0 ? (
+                <div className="reviewGood">
+                  <span>✓</span>
+                  <div>
+                    <strong>Everything looks good.</strong>
+                    <p>
+                      No transactions currently need review.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="reviewList">
+                  {reviewTransactions
+                    .slice(0, 5)
+                    .map((transaction) => (
+                      <div
+                        className="reviewRow"
+                        key={transaction.id}
+                      >
+                        <div>
+                          <strong>
+                            {transaction.description}
+                          </strong>
+                          <small>
+                            {transaction.date} · Missing receipt
+                          </small>
+                        </div>
+
+                        <strong>
+                          {money(
+                            Number(transaction.amount),
+                            currency
+                          )}
+                        </strong>
+                      </div>
+                    ))}
+
+                  <Link
+                    href="/transactions"
+                    className="reviewLink"
+                  >
+                    Review transactions →
+                  </Link>
+                </div>
+              )}
+            </section>
+
+            <section className="panel">
+              <div className="panelHead">
+                <div>
+                  <h2>Recent transactions</h2>
                   <span>
                     {transactions.length} total
                   </span>
                 </div>
 
-                {loading ? (
-
-                  <p className="muted">
-                    Loading…
-                  </p>
-
-                ) : transactions.length === 0 ? (
-
-                  <div className="empty">
-                    No transactions yet.
-                    Add your first one.
-                  </div>
-
-                ) : (
-
-                  <div className="txList">
-
-                    {transactions
-                      .slice(0, 10)
-                      .map((transaction) => (
-
-                        <div
-                          className="txRow"
-                          key={transaction.id}
-                        >
-
-                          <div>
-                            <b>
-                              {transaction.description}
-                            </b>
-
-                            <small>
-                              {transaction.date}
-
-                              {transaction.category
-                                ? ` · ${transaction.category}`
-                                : ""}
-                            </small>
-                          </div>
-
-                          <div className="txActions">
-
-                            <strong
-                              className={
-                                transaction.type ===
-                                "expense"
-                                  ? "expense"
-                                  : ""
-                              }
-                            >
-                              {transaction.type ===
-                              "expense"
-                                ? "−"
-                                : "+"}{" "}
-                              PKR{" "}
-                              {Number(
-                                transaction.amount
-                              ).toLocaleString()}
-                            </strong>
-
-                            <button
-                              type="button"
-                              className="deleteButton"
-                              onClick={() =>
-                                deleteTransaction(
-                                  transaction.id
-                                )
-                              }
-                            >
-                              Delete
-                            </button>
-
-                          </div>
-
-                        </div>
-
-                      ))}
-
-                  </div>
-
-                )}
-
-              </section>
-
-            </div>
-
-            <section
-              className="summarySection"
-              id="insights"
-            >
-
-              <div className="sectionTitle">
-                <div>
-                  <div className="eyebrow">
-                    Financial insights
-                  </div>
-
-                  <h2>
-                    Where your money is going
-                  </h2>
-                </div>
+                <Link href="/transactions">
+                  View all
+                </Link>
               </div>
 
-              {expenseCategories.length === 0 ? (
-
-                <div className="summaryCard">
-                  <p className="muted">
-                    Add some expenses to see
-                    spending insights here.
-                  </p>
+              {transactions.length === 0 ? (
+                <div className="empty">
+                  No transactions yet.
                 </div>
-
               ) : (
-
-                <div className="categoryGrid">
-
-                  {expenseCategories.map(
-                    ([category, amount]) => (
-                      <div
-                        className="summaryCard"
-                        key={category}
-                      >
-                        <span>
-                          {category}
-                        </span>
-
-                        <strong>
-                          PKR{" "}
-                          {amount.toLocaleString()}
-                        </strong>
+                <div className="txList">
+                  {transactions.slice(0, 8).map((t) => (
+                    <div className="txRow" key={t.id}>
+                      <div>
+                        <b>{t.description}</b>
+                        <small>
+                          {t.date}
+                          {t.category
+                            ? ` · ${t.category}`
+                            : ""}
+                        </small>
                       </div>
-                    )
-                  )}
 
+                      <strong
+                        className={
+                          t.type === "expense"
+                            ? "expense"
+                            : ""
+                        }
+                      >
+                        {t.type === "expense"
+                          ? "−"
+                          : "+"}{" "}
+                        {money(
+                          Number(t.amount),
+                          currency
+                        )}
+                      </strong>
+                    </div>
+                  ))}
                 </div>
-
               )}
-
             </section>
-
-            <section
-              className="summarySection"
-              id="customers"
-            >
-
-              <div className="sectionTitle">
-                <div>
-                  <div className="eyebrow">
-                    Customers
-                  </div>
-
-                  <h2>
-                    Customer overview
-                  </h2>
-                </div>
-              </div>
-
-              <div className="summaryCard">
-                <strong>
-                  Customer management
-                </strong>
-
-                <p className="muted">
-                  Customer tracking can be
-                  connected to your income
-                  transactions here.
-                </p>
-              </div>
-
-            </section>
-
-            <section
-              className="summarySection"
-              id="suppliers"
-            >
-
-              <div className="sectionTitle">
-                <div>
-                  <div className="eyebrow">
-                    Suppliers
-                  </div>
-
-                  <h2>
-                    Supplier overview
-                  </h2>
-                </div>
-              </div>
-
-              <div className="summaryCard">
-                <strong>
-                  Supplier management
-                </strong>
-
-                <p className="muted">
-                  Supplier and purchase
-                  tracking can be managed
-                  from this section.
-                </p>
-              </div>
-
-            </section>
-
           </section>
-
         </div>
-
       </div>
-
     </main>
   );
 }
