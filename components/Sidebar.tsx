@@ -1,97 +1,71 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export default function Sidebar() {
+  const pathname = usePathname();
+
   return (
     <aside className="sidebar">
       <div className="sidebarTop">
         <Link href="/" className="sidebarBrand">
           <span className="brandMark">M</span>
-          Money Clarity
+          <span>Money Clarity</span>
         </Link>
-
-        <Link href="/dashboard" className="sidebarAdd">
-          <span>+</span>
-          Add transaction
-        </Link>
-
-        <nav className="sidebarNav">
-          <div className="sidebarLabel">Overview</div>
-
-          <Link
-            href="/dashboard"
-            className="sidebarLink active"
-          >
-            <span className="sidebarIcon">⌂</span>
-            Dashboard
-          </Link>
-
-          <Link
-            href="/transactions"
-            className="sidebarLink"
-          >
-            <span className="sidebarIcon">↕</span>
-            Transactions
-          </Link>
-
-          <div className="sidebarLabel">Insights</div>
-
-          <Link
-            href="/insights"
-            className="sidebarLink"
-          >
-            <span className="sidebarIcon">◔</span>
-            Insights
-          </Link>
-
-          <Link
-            href="/customers"
-            className="sidebarLink"
-          >
-            <span className="sidebarIcon">♙</span>
-            Customers
-          </Link>
-
-          <Link
-            href="/suppliers"
-            className="sidebarLink"
-          >
-            <span className="sidebarIcon">▣</span>
-            Suppliers
-          </Link>
-
-          <div className="sidebarLabel">Manage</div>
-
-          <Link
-            href="/reports"
-            className="sidebarLink"
-          >
-            <span className="sidebarIcon">▤</span>
-            Reports
-          </Link>
-
-          <Link
-            href="/settings"
-            className="sidebarLink"
-          >
-            <span className="sidebarIcon">⚙</span>
-            Settings
-          </Link>
-        </nav>
       </div>
 
-      <div className="sidebarBottom">
-        <div className="sidebarHelp">
-          <div className="helpIcon">?</div>
+      <nav className="sidebarNav">
 
-          <div>
-            <strong>Need help?</strong>
-            <small>
-              Manage your finances with clarity.
-            </small>
-          </div>
-        </div>
+        <Link
+          href="/dashboard"
+          className={`sidebarLink ${
+            pathname === "/dashboard" ? "active" : ""
+          }`}
+        >
+          <span className="sidebarIcon">▦</span>
+          <span>Dashboard</span>
+        </Link>
+
+        <Link
+          href="/dashboard#transactions"
+          className="sidebarLink"
+        >
+          <span className="sidebarIcon">↕</span>
+          <span>Transactions</span>
+        </Link>
+
+        <Link
+          href="/dashboard#insights"
+          className="sidebarLink"
+        >
+          <span className="sidebarIcon">◔</span>
+          <span>Insights</span>
+        </Link>
+
+        <Link
+          href="/dashboard#customers"
+          className="sidebarLink"
+        >
+          <span className="sidebarIcon">♙</span>
+          <span>Customers</span>
+        </Link>
+
+        <Link
+          href="/dashboard#suppliers"
+          className="sidebarLink"
+        >
+          <span className="sidebarIcon">⌂</span>
+          <span>Suppliers</span>
+        </Link>
+
+      </nav>
+
+      <div className="sidebarBottom">
+        <Link href="/" className="sidebarLink">
+          <span className="sidebarIcon">←</span>
+          <span>Home</span>
+        </Link>
       </div>
     </aside>
   );
