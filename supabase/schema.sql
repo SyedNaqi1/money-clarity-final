@@ -1,0 +1,3 @@
+-- Use the SQL schema already run in your Supabase project.
+-- This file is included as documentation for the deployed project.
+-- If you need to recreate a fresh database, use the schema supplied in the chat.
